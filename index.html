@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Meditate</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Meditate">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<style>
+  :root {
+    --bg: #000;
+    --fg: #f4ead8;
+    --dim: #5a554c;
+    --accent: #d9a45b;
+    --line: #1c1a17;
+    --danger: #d9685b;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    overflow: hidden; -webkit-user-select: none; user-select: none; touch-action: manipulation;
+  }
+  body {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  #time {
+    font-variant-numeric: tabular-nums; font-weight: 200; letter-spacing: 0.02em;
+    font-size: min(30vw, 42vh); line-height: 1; margin: 0;
+    transition: opacity 0.4s;
+  }
+  #time.idle { opacity: 0.35; }
+  #hint {
+    margin-top: 6vh; font-size: 1.1rem; color: var(--dim); letter-spacing: 0.08em;
+    text-transform: uppercase; min-height: 1.5rem; text-align: center;
+  }
+  #controls {
+    position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 6vh);
+    display: flex; justify-content: center; gap: 28px; opacity: 0; pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  #controls.show { opacity: 1; pointer-events: auto; }
+  button {
+    background: transparent; color: var(--fg); border: 1px solid var(--dim); border-radius: 999px;
+    font: inherit; font-size: 1.1rem; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 14px 30px; cursor: pointer;
+  }
+  button.primary { border-color: var(--accent); color: var(--accent); }
+  #silence-wrap {
+    position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 6vh);
+    display: flex; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s;
+  }
+  #silence-wrap.show { opacity: 1; pointer-events: auto; }
+  #lock {
+    position: fixed; top: calc(env(safe-area-inset-top) + 14px); right: 18px;
+    font-size: 0.75rem; color: var(--dim); letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  #wakevideo { position: fixed; width: 1px; height: 1px; opacity: 0.01; pointer-events: none; left: 0; top: 0; }
+  @media (orientation: landscape) {
+    #time { font-size: min(24vw, 60vh); }
+  }
+
+  /* ---------- Today dots (tap to open the log) ---------- */
+  #today {
+    position: fixed; top: calc(env(safe-area-inset-top) + 6px); left: 8px;
+    display: flex; gap: 7px; padding: 10px; cursor: pointer; transition: opacity 0.3s;
+  }
+  #today.hide { opacity: 0; pointer-events: none; }
+  #today i { display: block; width: 9px; height: 9px; border-radius: 50%; border: 1px solid var(--dim); }
+  #today i.done { background: var(--accent); border-color: var(--accent); }
+
+  /* ---------- Toast ---------- */
+  #toast {
+    position: fixed; left: 0; right: 0; top: calc(env(safe-area-inset-top) + 16px); text-align: center;
+    font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent);
+    opacity: 0; transition: opacity 0.4s; pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+
+  /* ---------- Log overlay ---------- */
+  #log {
+    position: fixed; inset: 0; background: var(--bg); display: none; flex-direction: column;
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: calc(env(safe-area-inset-top) + 16px) 22px calc(env(safe-area-inset-bottom) + 36px);
+  }
+  #log.show { display: flex; }
+  #log .label { font-size: 0.7rem; color: var(--dim); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 12px; }
+  #log section { margin-bottom: 30px; }
+  #log .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
+  #log .head .label { margin: 0; font-size: 0.85rem; color: var(--fg); }
+  #log button { padding: 8px 16px; font-size: 0.8rem; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); font-size: 0.95rem; }
+  .row .n { color: var(--dim); width: 1em; font-variant-numeric: tabular-nums; }
+  .row .date { flex: 1; }
+  .row .time { color: var(--dim); font-variant-numeric: tabular-nums; }
+  .row .dur { font-variant-numeric: tabular-nums; min-width: 4em; text-align: right; }
+  .row .empty { flex: 1; color: var(--dim); }
+  .row .del { border: none; color: var(--dim); padding: 4px 8px; font-size: 1.2rem; line-height: 1; text-transform: none; letter-spacing: 0; }
+  .row.confirm .del { color: var(--danger); border: 1px solid var(--danger); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; padding: 6px 10px; }
+  #strip { position: relative; display: flex; gap: 4px; align-items: flex-end; height: 92px; padding-bottom: 20px; }
+  #strip .band { position: absolute; left: 0; right: 0; bottom: 47px; height: 18px; background: var(--accent); opacity: 0.1; border-radius: 2px; }
+  #strip .col { position: relative; flex: 1; display: flex; gap: 2px; align-items: flex-end; height: 72px; }
+  #strip .bar { flex: 1; border-radius: 2px 2px 0 0; background: var(--fg); opacity: 0.4; }
+  #strip .bar.in { background: var(--accent); opacity: 1; }
+  #strip .bar.none { background: var(--dim); opacity: 0.35; height: 2px; }
+  #strip .day { position: absolute; left: 0; right: 0; bottom: -20px; text-align: center; font-size: 0.6rem; color: var(--dim); }
+  #strip .col.now .day { color: var(--accent); }
+  #stats { color: var(--dim); font-size: 0.85rem; letter-spacing: 0.04em; margin: -12px 0 32px; line-height: 1.5; }
+  #sessions .none { color: var(--dim); font-size: 0.95rem; }
+  .actions { display: flex; gap: 12px; margin-top: 6px; }
+</style>
+</head>
+<body>
+  <div id="lock"></div>
+  <div id="today"><i></i><i></i></div>
+  <div id="toast"></div>
+  <div id="time" class="idle">0:00</div>
+  <div id="hint">Tap to begin</div>
+  <div id="controls">
+    <button id="resume" class="primary">Resume</button>
+    <button id="reset">Reset</button>
+  </div>
+  <div id="silence-wrap"><button id="silence">Silence bell</button></div>
+  <audio id="bell" preload="auto" src="bell.m4a"></audio>
+  <video id="wakevideo" playsinline muted loop preload="auto" src="wake.mp4"></video>
+
+  <div id="log">
+    <div class="head"><span class="label">Log</span><button id="log-close">Close</button></div>
+    <section>
+      <div class="label">Today</div>
+      <div id="today-list"></div>
+    </section>
+    <section>
+      <div class="label">Last 14 days</div>
+      <div id="strip"></div>
+    </section>
+    <div id="stats"></div>
+    <section>
+      <div class="label">Sessions</div>
+      <div id="sessions"></div>
+    </section>
+    <div class="actions">
+      <button id="export-json">Export JSON</button>
+      <button id="export-csv">Export CSV</button>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const timeEl = document.getElementById('time');
+  const hintEl = document.getElementById('hint');
+  const lockEl = document.getElementById('lock');
+  const controls = document.getElementById('controls');
+  const resumeBtn = document.getElementById('resume');
+  const resetBtn = document.getElementById('reset');
+  const video = document.getElementById('wakevideo');
+  const bell = document.getElementById('bell');
+  const silenceWrap = document.getElementById('silence-wrap');
+  const silenceBtn = document.getElementById('silence');
+  const todayEl = document.getElementById('today');
+  const toastEl = document.getElementById('toast');
+  const logEl = document.getElementById('log');
+
+  // Bell settings (minutes).
+  const NUDGE_AT = 30;      // first gentle bell
+  const NUDGE_EVERY = 2;    // repeat interval after the first bell, until silenced
+
+  // Log settings.
+  const MIN_LOG_MS = 5 * 60000;   // sessions shorter than this are not logged
+  const TARGET_MIN = 15;          // target range, minutes
+  const TARGET_MAX = 25;
+  const STRIP_DAYS = 14;
+  const STRIP_MAX_MIN = 40;       // bar height scale
+
+  const KEY = 'meditate.state';
+  // state: { running, startedAt (ms epoch of current run), accumulated (ms before current run),
+  //          sessionStartedAt (first start of this session), pausedAt (last pause) }
+  const FRESH = { running: false, startedAt: 0, accumulated: 0, lastNudge: 0, silenced: false, sessionStartedAt: 0, pausedAt: 0 };
+  let state = Object.assign({}, FRESH, load() || {});
+  let timer = 0;
+  let lastShown = '';
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; }
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
+  }
+
+  function elapsedMs() {
+    return state.accumulated + (state.running ? Date.now() - state.startedAt : 0);
+  }
+
+  function fmt(ms) {
+    const total = Math.floor(ms / 1000);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    const mm = h ? String(m).padStart(2, '0') : String(m);
+    return (h ? h + ':' : '') + mm + ':' + String(s).padStart(2, '0');
+  }
+
+  function render() {
+    const txt = fmt(elapsedMs());
+    if (txt !== lastShown) { timeEl.textContent = txt; lastShown = txt; }
+    if (state.running) checkNudge();
+  }
+
+  // ---------- Gentle bell ----------
+  function nextNudgeMinute() {
+    if (state.lastNudge < NUDGE_AT) return NUDGE_AT;
+    return state.lastNudge + NUDGE_EVERY;
+  }
+  function checkNudge() {
+    if (state.silenced) return;
+    const minutes = elapsedMs() / 60000;
+    const due = nextNudgeMinute();
+    if (minutes >= due) {
+      state.lastNudge = due;
+      save();
+      ring();
+      silenceWrap.classList.add('show');
+      hintEl.textContent = 'Bell every ' + NUDGE_EVERY + ' min';
+    }
+  }
+  function ring() {
+    try { bell.currentTime = 0; bell.play().catch((e) => console.warn('bell blocked', e)); } catch (e) {}
+  }
+  // iOS only lets audio play after a user gesture; a muted play during the start tap unlocks it.
+  function unlockAudio() {
+    try {
+      bell.muted = true;
+      const p = bell.play();
+      if (p && p.then) p.then(() => { bell.pause(); bell.currentTime = 0; bell.muted = false; })
+                        .catch(() => { bell.muted = false; });
+    } catch (e) { bell.muted = false; }
+  }
+  function silence() {
+    state.silenced = true;
+    save();
+    silenceWrap.classList.remove('show');
+    if (state.running) hintEl.textContent = 'Tap to pause';
+  }
+
+  function showState() {
+    clearInterval(timer);
+    if (state.running) timer = setInterval(render, 200);
+    const nudging = state.lastNudge >= NUDGE_AT && !state.silenced;
+    silenceWrap.classList.toggle('show', state.running && nudging);
+    todayEl.classList.toggle('hide', state.running);
+    renderDots();
+    if (state.running) {
+      timeEl.classList.remove('idle');
+      hintEl.textContent = nudging ? 'Bell every ' + NUDGE_EVERY + ' min' : 'Tap to pause';
+      controls.classList.remove('show');
+      render();
+    } else if (elapsedMs() > 0) {
+      timeEl.classList.remove('idle');
+      hintEl.textContent = 'Paused';
+      controls.classList.add('show');
+      render();
+    } else {
+      timeEl.classList.add('idle');
+      hintEl.textContent = 'Tap to begin · bell at ' + NUDGE_AT + ' min';
+      controls.classList.remove('show');
+      lastShown = ''; render();
+    }
+  }
+
+  function start() {
+    const now = Date.now();
+    state.running = true;
+    state.startedAt = now;
+    if (!state.sessionStartedAt || state.accumulated === 0) state.sessionStartedAt = now;
+    save();
+    unlockAudio();
+    keepAwake();
+    showState();
+  }
+  function pause() {
+    state.accumulated = elapsedMs();
+    state.running = false;
+    state.pausedAt = Date.now();
+    save();
+    releaseAwake();
+    showState();
+  }
+  // Reset ends the session. Anything of MIN_LOG_MS or more is logged; pauses are not counted.
+  function reset() {
+    const dur = elapsedMs();
+    const end = (!state.running && state.pausedAt) ? state.pausedAt : Date.now();
+    const startAt = state.sessionStartedAt || (end - dur);
+    if (dur >= MIN_LOG_MS) {
+      addSession(startAt, end, dur);
+      toast('Logged · ' + Math.round(dur / 60000) + ' min');
+    } else if (dur > 0) {
+      toast('Not logged · under ' + (MIN_LOG_MS / 60000) + ' min');
+    }
+    state = Object.assign({}, FRESH);
+    save();
+    releaseAwake();
+    showState();
+  }
+
+  // ---------- Session log ----------
+  // Each session: { id, start (ms), end (ms), dur (seconds, pauses excluded), day ("YYYY-MM-DD", local, from start) }
+  const LOG_KEY = 'meditate.sessions.v1';
+  let sessions = loadSessions();
+
+  function loadSessions() {
+    try { const a = JSON.parse(localStorage.getItem(LOG_KEY)); return Array.isArray(a) ? a : []; } catch { return []; }
+  }
+  function saveSessions() {
+    try { localStorage.setItem(LOG_KEY, JSON.stringify(sessions)); } catch {}
+  }
+  function uid() {
+    return (crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+  }
+  function dayKey(ms) {
+    const d = new Date(ms);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function addSession(startAt, end, durMs) {
+    sessions.push({ id: uid(), start: startAt, end, dur: Math.round(durMs / 1000), day: dayKey(startAt) });
+    saveSessions();
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  }
+  function removeSession(id) {
+    sessions = sessions.filter((s) => s.id !== id);
+    saveSessions();
+  }
+  // Map day -> sessions sorted by start. Session 1 is the earliest of the day, session 2 the next.
+  function byDay() {
+    const m = {};
+    for (const s of sessions) (m[s.day] || (m[s.day] = [])).push(s);
+    for (const k in m) m[k].sort((a, b) => a.start - b.start);
+    return m;
+  }
+  const mins = (s) => Math.round(s.dur / 60);
+  const inTarget = (s) => mins(s) >= TARGET_MIN && mins(s) <= TARGET_MAX;
+  const fmtTime = (ms) => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const fmtDate = (ms) => new Date(ms).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+  function localMidnight(daysAgo) {
+    const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - daysAgo); return d;
+  }
+
+  let toastTimer = 0;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2600);
+  }
+
+  function renderDots() {
+    const today = (byDay()[dayKey(Date.now())] || []).length;
+    todayEl.querySelectorAll('i').forEach((el, i) => el.classList.toggle('done', i < today));
+  }
+
+  function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+  function renderLog() {
+    const map = byDay();
+    const todayKey = dayKey(Date.now());
+
+    // Today: two slots.
+    const today = map[todayKey] || [];
+    let html = '';
+    for (let i = 0; i < Math.max(2, today.length); i++) {
+      const s = today[i];
+      html += '<div class="row"><span class="n">' + (i + 1) + '</span>' +
+        (s ? '<span class="date">' + esc(fmtTime(s.start)) + '</span><span class="dur">' + mins(s) + ' min</span>'
+           : '<span class="empty">—</span>') + '</div>';
+    }
+    document.getElementById('today-list').innerHTML = html;
+
+    // Strip: last 14 days, two bars per day, faint band for the target range.
+    const px = (m) => Math.max(2, Math.round(Math.min(m, STRIP_MAX_MIN) / STRIP_MAX_MIN * 72));
+    html = '<div class="band" style="bottom:' + (20 + px(TARGET_MIN)) + 'px;height:' + (px(TARGET_MAX) - px(TARGET_MIN)) + 'px"></div>';
+    for (let i = STRIP_DAYS - 1; i >= 0; i--) {
+      const d = localMidnight(i);
+      const list = map[dayKey(d.getTime())] || [];
+      html += '<div class="col' + (i === 0 ? ' now' : '') + '">';
+      for (let j = 0; j < 2; j++) {
+        const s = list[j];
+        html += s ? '<div class="bar' + (inTarget(s) ? ' in' : '') + '" style="height:' + px(mins(s)) + 'px"></div>'
+                  : '<div class="bar none"></div>';
+      }
+      html += '<div class="day">' + esc(d.toLocaleDateString([], { weekday: 'narrow' })) + '</div></div>';
+    }
+    document.getElementById('strip').innerHTML = html;
+
+    // Stats: last 7 days and streak of two-session days.
+    let done = 0, total = 0, count = 0;
+    for (let i = 0; i < 7; i++) {
+      const list = map[dayKey(localMidnight(i).getTime())] || [];
+      done += Math.min(2, list.length);
+      for (const s of list) { total += mins(s); count++; }
+    }
+    let d = localMidnight(0), streak = 0;
+    if ((map[dayKey(d.getTime())] || []).length < 2) d.setDate(d.getDate() - 1);
+    while ((map[dayKey(d.getTime())] || []).length >= 2) { streak++; d.setDate(d.getDate() - 1); }
+    document.getElementById('stats').textContent =
+      'Last 7 days · ' + done + ' of 14' +
+      (count ? ' · avg ' + Math.round(total / count) + ' min' : '') +
+      ' · streak ' + streak + (streak === 1 ? ' day' : ' days');
+
+    // Session list, newest first.
+    const recent = sessions.slice().sort((a, b) => b.start - a.start).slice(0, 60);
+    if (!recent.length) {
+      document.getElementById('sessions').innerHTML = '<div class="none">No sessions yet. Anything over ' + (MIN_LOG_MS / 60000) + ' minutes is logged when you reset.</div>';
+    } else {
+      html = '';
+      for (const s of recent) {
+        const n = (map[s.day] || []).indexOf(s) + 1;
+        html += '<div class="row" data-id="' + esc(s.id) + '"><span class="n">' + n + '</span>' +
+          '<span class="date">' + esc(fmtDate(s.start)) + '</span>' +
+          '<span class="time">' + esc(fmtTime(s.start)) + '</span>' +
+          '<span class="dur">' + mins(s) + ' min</span>' +
+          '<button class="del" aria-label="Delete">×</button></div>';
+      }
+      document.getElementById('sessions').innerHTML = html;
+    }
+  }
+
+  function openLog() { renderLog(); logEl.classList.add('show'); logEl.scrollTop = 0; }
+  function closeLog() { logEl.classList.remove('show'); renderDots(); }
+
+  function clearConfirms() {
+    logEl.querySelectorAll('.row.confirm').forEach((r) => { r.classList.remove('confirm'); r.querySelector('.del').textContent = '×'; });
+  }
+  // Delete is two taps: the first turns the × into "Delete", the second removes the session.
+  logEl.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const del = e.target.closest('.del');
+    if (del) {
+      const row = del.closest('.row');
+      if (row.classList.contains('confirm')) {
+        removeSession(row.dataset.id);
+        renderLog();
+      } else {
+        clearConfirms();
+        row.classList.add('confirm');
+        del.textContent = 'Delete';
+      }
+      return;
+    }
+    clearConfirms();
+  });
+  document.getElementById('log-close').addEventListener('click', closeLog);
+
+  // ---------- Export ----------
+  function exportFile(name, type, text) {
+    const blob = new Blob([text], { type });
+    try {
+      const file = new File([blob], name, { type });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        navigator.share({ files: [file], title: name }).catch(() => {});
+        return;
+      }
+    } catch (e) {}
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1000);
+  }
+  document.getElementById('export-json').addEventListener('click', () => {
+    exportFile('meditation-sessions.json', 'application/json', JSON.stringify(sessions, null, 2));
+  });
+  document.getElementById('export-csv').addEventListener('click', () => {
+    const rows = [['id', 'day', 'start', 'end', 'duration_sec', 'duration_min']];
+    for (const s of sessions.slice().sort((a, b) => a.start - b.start)) {
+      rows.push([s.id, s.day, new Date(s.start).toISOString(), new Date(s.end).toISOString(), s.dur, mins(s)]);
+    }
+    exportFile('meditation-sessions.csv', 'text/csv', rows.map((r) => r.join(',')).join('\n'));
+  });
+
+  // ---------- Keep the screen awake ----------
+  let wakeLock = null;
+  let usingVideo = false;
+
+  async function keepAwake() {
+    if ('wakeLock' in navigator) {
+      try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; updateLockLabel(); });
+        updateLockLabel();
+        return;
+      } catch (e) {
+        console.warn('Wake lock failed, using video fallback', e);
+      }
+    }
+    // Fallback: a tiny looping video keeps iOS awake.
+    try { await video.play(); usingVideo = true; } catch (e) { console.warn('video fallback failed', e); }
+    updateLockLabel();
+  }
+  function releaseAwake() {
+    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+    if (usingVideo) { video.pause(); usingVideo = false; }
+    updateLockLabel();
+  }
+  function updateLockLabel() {
+    lockEl.textContent = (wakeLock || usingVideo) ? 'awake' : '';
+  }
+
+  // Wake locks are dropped when the app goes to the background; re-acquire when it returns.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      showState();               // recompute from timestamps; time kept running in background
+      if (state.running) keepAwake();
+      if (logEl.classList.contains('show')) renderLog();
+    }
+  });
+
+  // ---------- Input ----------
+  document.body.addEventListener('click', (e) => {
+    if (controls.contains(e.target) || silenceWrap.contains(e.target) || todayEl.contains(e.target)) return;
+    if (logEl.classList.contains('show')) return;
+    if (state.running) pause();
+    else if (elapsedMs() === 0) start();
+  });
+  resumeBtn.addEventListener('click', (e) => { e.stopPropagation(); start(); });
+  resetBtn.addEventListener('click', (e) => { e.stopPropagation(); reset(); });
+  silenceBtn.addEventListener('click', (e) => { e.stopPropagation(); silence(); });
+  todayEl.addEventListener('click', (e) => { e.stopPropagation(); openLog(); });
+
+  // Prevent long-press callout on iOS (double-tap zoom is disabled via touch-action/viewport).
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  showState();
+  if (state.running) keepAwake();
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>
