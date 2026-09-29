@@ -1,4 +1,4 @@
-const CACHE = 'meditate-v3';
+const CACHE = 'meditate-v4';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png', './wake.mp4', './bell.m4a'];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

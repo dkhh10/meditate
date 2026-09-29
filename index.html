@@ -264,11 +264,12 @@
     } else if (elapsedMs() > 0) {
       timeEl.classList.remove('idle');
       hintEl.textContent = 'Paused';
+      resetBtn.textContent = elapsedMs() >= MIN_LOG_MS ? 'Finish' : 'Reset';
       controls.classList.add('show');
       render();
     } else {
       timeEl.classList.add('idle');
-      hintEl.textContent = 'Tap to begin · bell at ' + NUDGE_AT + ' min';
+      hintEl.textContent = sessions.length ? 'Bell at ' + NUDGE_AT + ' min' : 'Tap to begin · bell at ' + NUDGE_AT + ' min';
       controls.classList.remove('show');
       lastShown = ''; render();
     }
@@ -289,6 +290,7 @@
     state.running = false;
     state.pausedAt = Date.now();
     save();
+    try { if (navigator.vibrate) navigator.vibrate(30); } catch (e) {}
     releaseAwake();
     showState();
   }
